@@ -1,8 +1,9 @@
 module int::int8;
 
 const OverFlowError: u64 = 1;
-const DivisionByZeroError: u64 = 2;
-const NegativeMod: u64 = 3;
+const OutofBoundError: u64 = 2;
+const DivisionByZeroError: u64 = 3;
+const NegativeMod: u64 = 4;
 
 const BIT_SIZE: u8 = 8;
 const MAX_MAGNITUDE: u8 = 1 << (BIT_SIZE - 1); // 2^7
@@ -50,10 +51,10 @@ public fun try_new(magnitude: u8, is_positive: bool): Option<Int8> {
 }
 
 public fun to_u8(a: Int8): u8 {
-    try_to_uint8(a).extract()
+    try_to_u8(a).extract()
 }
 
-public fun try_to_uint8(a: Int8): Option<u8> {
+public fun try_to_u8(a: Int8): Option<u8> {
     if (a.rep > MAX_POSITIVE_INT8) {
         option::none()
     } else {
@@ -61,7 +62,7 @@ public fun try_to_uint8(a: Int8): Option<u8> {
     }
 }
 
-public fun raw_bit(a: Int8): u8 {
+public fun raw_bits(a: Int8): u8 {
     return a.rep
 }
 
@@ -86,12 +87,10 @@ public fun gt(a: Int8, b: Int8): bool {
 }
 
 public fun lteq(a: Int8, b: Int8): bool {
-    if (a == b) { return true };
     a == min(a, b)
 }
 
 public fun gteq(a: Int8, b: Int8): bool {
-    if (a == b) { return true };
     a == max(a, b)
 }
 
@@ -126,7 +125,7 @@ public fun shr(x: Int8, shift: u8): Int8 {
 }
 
 public fun abs(a: Int8): Int8 {
-    assert!(a.rep != MIN_NEGATIVE_INT8, OverFlowError);
+    assert!(a.rep != MIN_NEGATIVE_INT8, OutofBoundError);
     if (is_positive_int8(a.rep)) {
         a
     } else {
@@ -136,7 +135,7 @@ public fun abs(a: Int8): Int8 {
 }
 
 public fun neg(a: Int8): Int8 {
-    assert!(a.rep != MIN_NEGATIVE_INT8, OverFlowError);
+    assert!(a.rep != MIN_NEGATIVE_INT8, OutofBoundError);
     let rep = to_2s_complement(a.rep);
     Int8 { rep }
 }
@@ -188,7 +187,9 @@ public fun div(a: Int8, b: Int8): Int8 {
 }
 
 public fun try_div(a: Int8, b: Int8): Option<Int8> {
-    assert!(b.rep != 0, DivisionByZeroError);
+    if (b.rep == 0) {
+        return option::none()
+    };
     let mut rep = try_div_int8(a.rep, b.rep);
     if (option::is_none(&rep)) {
         return option::none()
@@ -243,12 +244,12 @@ fun try_mul_int8(a: u8, b: u8): Option<u8> {
         }
     } else if (is_negative_int8(b)) {
         let b_neg = to_2s_complement(b);
-        if (safe_multiply(a, b_neg)) {
+        if (safe_multiply_polar(a, b_neg)) {
             return option::some(to_2s_complement(a * b_neg))
         }
     } else {
         let a_neg = to_2s_complement(a);
-        if (safe_multiply(b, a_neg)) {
+        if (safe_multiply_polar(b, a_neg)) {
             return option::some(to_2s_complement(b * a_neg))
         }
     };
@@ -259,10 +260,14 @@ fun safe_multiply(a: u8, b: u8): bool {
     return MAX_POSITIVE_INT8 / a >= b
 }
 
+fun safe_multiply_polar(a: u8, b: u8): bool {
+    return MIN_NEGATIVE_INT8 / a >= b
+}
+
 fun div_int8(a: u8, b: u8): u8 {
     let mut result = try_div_int8(a, b);
     if (option::is_none(&result)) {
-        abort OverFlowError
+        abort OutofBoundError // caused by division of -128 and -1
     };
     result.extract()
 }
@@ -294,6 +299,9 @@ fun sub_int8(a: u8, b: u8): u8 {
 }
 
 fun try_sub_int8(a: u8, b: u8): Option<u8> {
+    if (b == 0) {
+        return option::some(a)
+    };
     try_add_int8(a, to_2s_complement(b))
 }
 
@@ -313,7 +321,7 @@ fun try_add_int8(a: u8, b: u8): Option<u8> {
     } else if (is_negative_int8(a) && is_negative_int8(b)) {
         let a_neg = to_2s_complement(a);
         let b_neg = to_2s_complement(b);
-        if (safe_add(a_neg, b_neg)) {
+        if (safe_add_neg(a_neg, b_neg)) {
             let magnitude = a_neg + b_neg;
             return option::some(to_2s_complement(magnitude))
         }
@@ -330,6 +338,10 @@ fun try_add_int8(a: u8, b: u8): Option<u8> {
 
 fun safe_add(a: u8, b: u8): bool {
     return MAX_POSITIVE_INT8 - a >= b
+}
+
+fun safe_add_neg(a: u8, b: u8): bool {
+    return MIN_NEGATIVE_INT8 - a>= b
 }
 
 fun truncated_sum(a: u8, b: u8): u8 {
@@ -357,7 +369,6 @@ fun shr_int8(x: u8, shift: u8): u8 {
     let mut rep = x >> shift;
     if (x & MAX_MAGNITUDE != 0) {
         let bits = (1 << (shift) ) - 1;
-
         let factor = bits << (BIT_SIZE  - shift);
 
         rep = rep + factor;

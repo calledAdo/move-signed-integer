@@ -3,14 +3,10 @@
 
 module int::int32;
 
-/// Error code for overflow.
 const OverFlowError: u64 = 1;
-
-/// Error code for division by zero.
-const DivisionByZeroError: u64 = 2;
-
-/// Error code for negative modulus.
-const NegativeMod: u64 = 3;
+const OutofBoundError: u64 = 2;
+const DivisionByZeroError: u64 = 3;
+const NegativeMod: u64 = 4;
 
 const BIT_SIZE: u8 = 32;
 
@@ -37,10 +33,10 @@ public fun from_raw_bits(bits: u32): Int32 {
 }
 
 public fun from_u32(magnitude: u32): Int32 {
-    try_from_uint32(magnitude).extract()
+    try_from_u32(magnitude).extract()
 }
 
-public fun try_from_uint32(magnitude: u32): Option<Int32> {
+public fun try_from_u32(magnitude: u32): Option<Int32> {
     if (magnitude > MAX_POSITIVE_INT32) {
         option::none()
     } else {
@@ -69,10 +65,10 @@ public fun try_new(magnitude: u32, is_positive: bool): Option<Int32> {
 
 /// Convert from type functions
 public fun to_u32(a: Int32): u32 {
-    try_to_uint32(a).extract()
+    try_to_u32(a).extract()
 }
 
-public fun try_to_uint32(a: Int32): Option<u32> {
+public fun try_to_u32(a: Int32): Option<u32> {
     if (a.rep > MAX_POSITIVE_INT32) {
         option::none()
     } else {
@@ -80,7 +76,7 @@ public fun try_to_uint32(a: Int32): Option<u32> {
     }
 }
 
-public fun raw_bit(a: Int32): u32 {
+public fun raw_bits(a: Int32): u32 {
     return a.rep
 }
 
@@ -105,15 +101,9 @@ public fun gt(a: Int32, b: Int32): bool {
     a == max(a, b)
 }
 
-public fun lteq(a: Int32, b: Int32): bool {
-    if (a == b) { return true };
-    a == min(a, b)
-}
+public fun lteq(a: Int32, b: Int32): bool { a == min(a, b) }
 
-public fun gteq(a: Int32, b: Int32): bool {
-    if (a == b) { return true };
-    a == max(a, b)
-}
+public fun gteq(a: Int32, b: Int32): bool { a == max(a, b) }
 
 public fun eq(a: Int32, b: Int32): bool {
     a.rep == b.rep
@@ -147,7 +137,7 @@ public fun shr(x: Int32, shift: u8): Int32 {
 }
 
 public fun abs(a: &Int32): Int32 {
-    assert!(a.rep != MIN_NEGATIVE_INT32, OverFlowError);
+    assert!(a.rep != MIN_NEGATIVE_INT32, OutofBoundError);
     if (is_positive_int32(a.rep)) {
         Int32 { rep: a.rep }
     } else {
@@ -157,7 +147,7 @@ public fun abs(a: &Int32): Int32 {
 }
 
 public fun neg(a: Int32): Int32 {
-    assert!(a.rep != MIN_NEGATIVE_INT32, OverFlowError);
+    assert!(a.rep != MIN_NEGATIVE_INT32, OutofBoundError);
     let rep = to_2s_complement(a.rep);
     Int32 { rep }
 }
@@ -266,12 +256,12 @@ fun try_mul_int32(a: u32, b: u32): Option<u32> {
         }
     } else if (is_negative_int32(b)) {
         let b_neg = to_2s_complement(b);
-        if (safe_multiply(a, b_neg)) {
+        if (safe_multiply_polar(a, b_neg)) {
             return option::some(to_2s_complement(a * b_neg))
         }
     } else {
         let a_neg = to_2s_complement(a);
-        if (safe_multiply(b, a_neg)) {
+        if (safe_multiply_polar(b, a_neg)) {
             return option::some(to_2s_complement(a_neg * b))
         }
     };
@@ -282,10 +272,14 @@ fun safe_multiply(a: u32, b: u32): bool {
     return MAX_POSITIVE_INT32 / a >= b
 }
 
+fun safe_multiply_polar(a: u32, b: u32): bool {
+    return MIN_NEGATIVE_INT32 / a >= b
+}
+
 fun div_int32(a: u32, b: u32): u32 {
     let mut result = try_div_int32(a, b);
     if (option::is_none(&result)) {
-        abort OverFlowError
+        abort OutofBoundError
     };
     result.extract()
 }
@@ -317,6 +311,9 @@ fun sub_int32(a: u32, b: u32): u32 {
 }
 
 fun try_sub_int32(a: u32, b: u32): Option<u32> {
+    if (b ==0) {
+        return option::some(a)
+    };
     try_add_int32(a, to_2s_complement(b))
 }
 
@@ -336,7 +333,7 @@ fun try_add_int32(a: u32, b: u32): Option<u32> {
     } else if (is_negative_int32(a) && is_negative_int32(b)) {
         let a_neg = to_2s_complement(a);
         let b_neg = to_2s_complement(b);
-        if (safe_add(a_neg, b_neg)) {
+        if (safe_add_neg(a_neg, b_neg)) {
             let magnitude = a_neg + b_neg;
             return option::some(to_2s_complement(magnitude))
         }
@@ -353,6 +350,10 @@ fun try_add_int32(a: u32, b: u32): Option<u32> {
 
 fun safe_add(a: u32, b: u32): bool {
     return MAX_POSITIVE_INT32 - a >= b
+}
+
+fun safe_add_neg(a: u32, b: u32): bool {
+    return MIN_NEGATIVE_INT32 - a >= b
 }
 
 fun truncated_sum(a: u32, b: u32): u32 {

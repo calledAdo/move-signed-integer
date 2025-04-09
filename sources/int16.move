@@ -1,8 +1,9 @@
 module int::int16;
 
 const OverFlowError: u64 = 1;
-const DivisionByZeroError: u64 = 2;
-const NegativeMod: u64 = 3;
+const OutofBoundError: u64 = 2;
+const DivisionByZeroError: u64 = 3;
+const NegativeMod: u64 = 4;
 
 const BIT_SIZE: u8 = 16;
 const MAX_MAGNITUDE: u16 = 1 << (BIT_SIZE - 1); // 2^17
@@ -14,20 +15,19 @@ public struct Int16 has copy, drop, store {
     rep: u16,
 }
 
-
 /// Create Int16 type functions
-/// 
-/// 
-/// 
+///
+///
+///
 public fun from_raw_bits(bits: u16): Int16 {
     return Int16 { rep: bits }
 }
 
 public fun from_u16(magnitude: u16): Int16 {
-    try_from_ut16(magnitude).extract()
+    try_from_u16(magnitude).extract()
 }
 
-public fun try_from_ut16(magnitude: u16): Option<Int16> {
+public fun try_from_u16(magnitude: u16): Option<Int16> {
     if (magnitude > MAX_POSITIVE_INT18) {
         option::none()
     } else {
@@ -54,17 +54,16 @@ public fun try_new(magnitude: u16, is_positive: bool): Option<Int16> {
     }
 }
 
-
 /// Convert to different type functions
-/// 
-/// 
-/// 
+///
+///
+///
 ///
 public fun to_u16(a: Int16): u16 {
-    try_to_uint16(a).extract()
+    try_to_u16(a).extract()
 }
 
-public fun try_to_uint16(a: Int16): Option<u16> {
+public fun try_to_u16(a: Int16): Option<u16> {
     if (a.rep > MAX_POSITIVE_INT18) {
         option::none()
     } else {
@@ -72,15 +71,14 @@ public fun try_to_uint16(a: Int16): Option<u16> {
     }
 }
 
-public fun raw_bit(a: Int16): u16 {
+public fun raw_bits(a: Int16): u16 {
     return a.rep
 }
 
-
 /// Comaprison function for Int16 type
-/// 
-/// 
-/// 
+///
+///
+///
 public fun max(a: Int16, b: Int16): Int16 {
     let rep = max_int16(a.rep, b.rep);
     Int16 { rep }
@@ -102,12 +100,10 @@ public fun gt(a: Int16, b: Int16): bool {
 }
 
 public fun lteq(a: Int16, b: Int16): bool {
-    if (a == b) { return true };
     a == min(a, b)
 }
 
 public fun gteq(a: Int16, b: Int16): bool {
-    if (a == b) { return true };
     a == max(a, b)
 }
 
@@ -131,12 +127,11 @@ public fun is_nat(a: Int16): bool {
     return a.rep > 0 && a.rep < MIN_NEGATIVE_INT18
 }
 
-
 /// Bitwise operation functions for Int16 type
-/// 
-/// 
-/// 
-/// 
+///
+///
+///
+///
 
 public fun shl(x: Int16, shift: u8): Int16 {
     let rep = x.rep << shift;
@@ -149,7 +144,7 @@ public fun shr(x: Int16, shift: u8): Int16 {
 }
 
 public fun abs(a: &Int16): Int16 {
-    assert!(a.rep != MIN_NEGATIVE_INT18, OverFlowError);
+    assert!(a.rep != MIN_NEGATIVE_INT18, OutofBoundError);
     if (is_positive_int16(a.rep)) {
         Int16 { rep: a.rep }
     } else {
@@ -159,13 +154,12 @@ public fun abs(a: &Int16): Int16 {
 }
 
 public fun neg(a: Int16): Int16 {
-    assert!(a.rep != MIN_NEGATIVE_INT18, OverFlowError);
+    assert!(a.rep != MIN_NEGATIVE_INT18, OutofBoundError);
     let rep = to_2s_complement(a.rep);
     Int16 { rep }
 }
 
-
-/// Arithmetic Operations on Int8 type 
+/// Arithmetic Operations on Int8 type
 public fun add(a: Int16, b: Int16): Int16 {
     let rep = add_int16(a.rep, b.rep);
     Int16 { rep }
@@ -226,11 +220,10 @@ public fun mod(a: Int16, b: Int16): Int16 {
     Int16 { rep }
 }
 
-
 /// Private helper functions for Int16 type
-/// 
-/// 
-/// 
+///
+///
+///
 
 fun max_int16(a: u16, b: u16): u16 {
     if (is_positive_int16(a) && is_positive_int16(b)) {
@@ -274,13 +267,13 @@ fun try_mul_int16(a: u16, b: u16): Option<u16> {
         }
     } else if (is_negative_int16(b)) {
         let b_neg = to_2s_complement(b);
-        if (safe_multiply(a, b_neg)) {
+        if (safe_multiply_polar(a, b_neg)) {
             return option::some(to_2s_complement(a * b_neg))
         }
     } else {
         let a_neg = to_2s_complement(a);
-        if (safe_multiply(b, a_neg)) {
-             return option::some(to_2s_complement(b * a_neg))
+        if (safe_multiply_polar(b, a_neg)) {
+            return option::some(to_2s_complement(b * a_neg))
         }
     };
     return option::none()
@@ -290,10 +283,14 @@ fun safe_multiply(a: u16, b: u16): bool {
     return MAX_POSITIVE_INT18 / a >= b
 }
 
+fun safe_multiply_polar(a: u16, b: u16): bool {
+    return MIN_NEGATIVE_INT18 / a >= b
+}
+
 fun div_int16(a: u16, b: u16): u16 {
     let mut result = try_div_int16(a, b);
     if (option::is_none(&result)) {
-        abort OverFlowError
+        abort OutofBoundError
     };
     result.extract()
 }
@@ -325,6 +322,9 @@ fun sub_int16(a: u16, b: u16): u16 {
 }
 
 fun try_sub_int16(a: u16, b: u16): Option<u16> {
+    if (b==0) {
+        return option::some(a)
+    };
     try_add_int16(a, to_2s_complement(b))
 }
 
@@ -344,7 +344,7 @@ fun try_add_int16(a: u16, b: u16): Option<u16> {
     } else if (is_negative_int16(a) && is_negative_int16(b)) {
         let a_neg = to_2s_complement(a);
         let b_neg = to_2s_complement(b);
-        if (safe_add(a_neg, b_neg)) {
+        if (safe_add_neg(a_neg, b_neg)) {
             let magnitude = a_neg + b_neg;
             return option::some(to_2s_complement(magnitude))
         }
@@ -360,7 +360,11 @@ fun try_add_int16(a: u16, b: u16): Option<u16> {
 }
 
 fun safe_add(a: u16, b: u16): bool {
-    return MAX_POSITIVE_INT18 - a >= b
+    return MIN_NEGATIVE_INT18 - a >= b
+}
+
+fun safe_add_neg(a: u16, b: u16): bool {
+    return MIN_NEGATIVE_INT18 - a >= b
 }
 
 fun truncated_sum(a: u16, b: u16): u16 {
@@ -389,7 +393,7 @@ fun shr_int16(x: u16, shift: u8): u16 {
     if (x & MAX_MAGNITUDE != 0) {
         let bits = (1 << (shift) ) - 1;
 
-        let factor = bits << (BIT_SIZE as u8 - shift);
+        let factor = bits << (BIT_SIZE  - shift);
 
         rep = rep + factor;
     };

@@ -3,18 +3,13 @@
 
 module int::int128;
 
-
-
 /// Error code for overflow.
 const OverFlowError: u64 = 1;
+const OutofBoundError: u64 = 2;
+const DivisionByZeroError: u64 = 3;
+const NegativeMod: u64 = 4;
 
-/// Error code for division by zero.
-const DivisionByZeroError: u64 = 2;
-
-/// Error code for negative modulus.
-const NegativeMod: u64 = 3;
-
-const BIT_SIZE: u64 = 128;
+const BIT_SIZE: u8 = 128;
 
 /// Maximum magnitude for a 128-bit signed integer
 /// magnitude of a => |a| eg |-2| = 2
@@ -91,7 +86,7 @@ public fun try_to_uint128(a: Int128): Option<u128> {
     }
 }
 
-public fun raw_bit(a: Int128): u128 {
+public fun raw_bits(a: Int128): u128 {
     return a.rep
 }
 
@@ -168,7 +163,7 @@ public fun shr(x: Int128, shift: u8): Int128 {
 }
 
 public fun abs(a: &Int128): Int128 {
-    assert!(a.rep != MIN_NEGATIVE_INT128, OverFlowError);
+    assert!(a.rep != MIN_NEGATIVE_INT128, OutofBoundError);
     if (is_positive_int128(a.rep)) {
         Int128 { rep: a.rep }
     } else {
@@ -178,7 +173,7 @@ public fun abs(a: &Int128): Int128 {
 }
 
 public fun neg(a: Int128): Int128 {
-    assert!(a.rep != MIN_NEGATIVE_INT128, OverFlowError);
+    assert!(a.rep != MIN_NEGATIVE_INT128, OutofBoundError);
     let rep = to_2s_complement(a.rep);
     Int128 { rep }
 }
@@ -294,12 +289,12 @@ fun try_mul_int128(a: u128, b: u128): Option<u128> {
         }
     } else if (is_negative_int128(b)) {
         let b_neg = to_2s_complement(b);
-        if (safe_multiply(a, b_neg)) {
+        if (safe_multiply_polar(a, b_neg)) {
             return option::some(to_2s_complement(a * b_neg))
         }
     } else {
         let a_neg = to_2s_complement(a);
-        if (safe_multiply(b, a_neg)) {
+        if (safe_multiply_polar(b, a_neg)) {
             return option::some(to_2s_complement(b * a_neg))
         }
     };
@@ -310,10 +305,14 @@ fun safe_multiply(a: u128, b: u128): bool {
     return MAX_POSITIVE_INT128 / a >= b
 }
 
+fun safe_multiply_polar(a: u128, b: u128): bool {
+    return MIN_NEGATIVE_INT128 /a >= b
+}
+
 fun div_int128(a: u128, b: u128): u128 {
     let mut result = try_div_int128(a, b);
     if (option::is_none(&result)) {
-        abort OverFlowError
+        abort OutofBoundError
     };
     result.extract()
 }
@@ -345,6 +344,9 @@ fun sub_int128(a: u128, b: u128): u128 {
 }
 
 fun try_sub_int128(a: u128, b: u128): Option<u128> {
+    if (b == 0) {
+        return option::some(a)
+    };
     try_add_int128(a, to_2s_complement(b))
 }
 
@@ -364,7 +366,7 @@ fun try_add_int128(a: u128, b: u128): Option<u128> {
     } else if (is_negative_int128(a) && is_negative_int128(b)) {
         let a_neg = to_2s_complement(a);
         let b_neg = to_2s_complement(b);
-        if (safe_add(a_neg, b_neg)) {
+        if (safe_add_neg(a_neg, b_neg)) {
             let magnitude = a_neg + b_neg;
             return option::some(to_2s_complement(magnitude))
         }
@@ -381,6 +383,10 @@ fun try_add_int128(a: u128, b: u128): Option<u128> {
 
 fun safe_add(a: u128, b: u128): bool {
     return MAX_POSITIVE_INT128 - a >= b
+}
+
+fun safe_add_neg(a: u128, b: u128): bool {
+    return MIN_NEGATIVE_INT128 - a >= b
 }
 
 fun truncated_sum(a: u128, b: u128): u128 {
@@ -409,7 +415,7 @@ fun shr_int128(x: u128, shift: u8): u128 {
     if (x & MAX_MAGNITUDE != 0) {
         let bits = (1 << (shift) ) - 1;
 
-        let factor = bits << (BIT_SIZE as u8 - shift);
+        let factor = bits << (BIT_SIZE  - shift);
 
         rep = rep + factor;
     };
